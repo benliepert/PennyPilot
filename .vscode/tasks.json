@@ -1,0 +1,40 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Run CI Checks",
+        "detail": "Run check.sh",
+        "type": "shell",
+        "command": "./check.sh",
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": {
+            "executable": "/bin/bash",
+            "args": ["-c"]
+          }
+        },
+        "problemMatcher": [],
+        "group": {
+          "kind": "test",
+          "isDefault": true
+        }
+      },
+      {
+        "label": "Cargo Run (Debug)",
+        "detail": "RUST_LOG=penny_pilot=debug cargo r",
+        "type": "shell",
+        "command": "cargo r",
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "env": {
+            "RUST_LOG": "penny_pilot=debug"
+          }
+        },
+        "problemMatcher": [
+          "$rustc"
+        ],
+        "group": "test"
+      }
+    ]
+  }
+  
