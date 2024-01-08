@@ -3,7 +3,7 @@ use crate::backend::DataManager;
 mod components;
 mod egui_app;
 
-use components::{AddEntry, Entries, Graph, Limits};
+use components::{AddEntry, Entries, Graph};
 use egui::{vec2, Ui, Window};
 use strum_macros::EnumIter;
 

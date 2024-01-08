@@ -1,9 +1,7 @@
 use crate::backend::DataManager;
-use crate::category::Category;
 use crate::entry::{Cost, Entry};
 use chrono::NaiveDate;
 use egui::Ui;
-use strum::IntoEnumIterator;
 
 pub struct AddEntry {
     date: NaiveDate,

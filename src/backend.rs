@@ -1,15 +1,13 @@
-use chrono::{Datelike, NaiveDate};
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use strum::IntoEnumIterator;
-
-use crate::category::Category;
+use crate::category::CategoryName;
 use crate::csvadapter::*;
 use crate::entry::{Cost, Entry};
 use crate::organize::*;
+use chrono::{Datelike, NaiveDate};
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 type Comparator = Box<dyn Fn(&Entry, &Entry) -> std::cmp::Ordering>;
-type CostMap = BTreeMap<Category, BTreeMap<NaiveDate, f32>>;
+type CostMap = BTreeMap<CategoryName, BTreeMap<NaiveDate, f32>>;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -254,7 +252,16 @@ impl DataManager {
 
 mod tests {
     use super::*;
-    use crate::category::Category;
+
+    fn random_category() -> CategoryName {
+        use rand::Rng;
+        use std::str::FromStr;
+        let tests = ["test1", "test2", "test3", "test4", "test5"];
+        let mut rng = rand::thread_rng();
+        let index = rng.gen_range(0..tests.len());
+        let name = tests[index];
+        CategoryName::from_str(name).unwrap()
+    }
 
     /// Modify the backend in place. give it a random list of (sorted) entries of a particular size
     fn _fill_entries(size: usize, backend: &mut DataManager) {
@@ -277,7 +284,7 @@ mod tests {
                 name: format!("entry{}", i),
                 cost: Cost::try_from(rng.gen_range(1.0..=500.0)).unwrap(),
                 date,
-                category: Category::_get_random(),
+                category: random_category(),
             });
         }
 
