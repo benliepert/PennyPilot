@@ -1,4 +1,5 @@
-use crate::backend::DataManager;
+use crate::category::CategoryManager;
+use crate::datamanager::DataManager;
 
 mod components;
 mod egui_app;
@@ -75,7 +76,7 @@ pub struct App {
     pub data_mgr: DataManager,
     pub window_state: WindowState,
 
-    pub spending_limits: Limits,
+    pub cat_mgr: CategoryManager,
     pub entry_view: Entries,
     pub add_entry_view: AddEntry,
     pub graph: Graph,
@@ -103,7 +104,7 @@ impl Default for App {
             add_entry_view: AddEntry::default(),
             window_state: WindowState::default(),
             entry_view,
-            spending_limits: Limits::default(),
+            cat_mgr: CategoryManager::default(),
             #[cfg(target_arch = "wasm32")]
             file_pick: Arc::new(Mutex::new(None)),
         }
@@ -146,7 +147,7 @@ impl App {
             .default_size(vec2(200.0, 400.0))
             .vscroll(false)
             .show(ui.ctx(), |ui| {
-                self.spending_limits.ui(ui, &self.data_mgr);
+                self.cat_mgr.limits_ui(ui, &self.data_mgr);
             });
 
         Window::new("Graph Settings")

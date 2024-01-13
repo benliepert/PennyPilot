@@ -4,7 +4,7 @@ use egui::Ui;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use crate::backend::DataManager;
+use crate::datamanager::DataManager;
 use crate::entry::Entry;
 
 #[derive(Ord, PartialOrd, PartialEq, Eq, serde::Deserialize, serde::Serialize, Clone, Debug)]

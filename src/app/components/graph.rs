@@ -1,7 +1,8 @@
+use crate::category::CategoryName;
 use crate::colors::*;
 use crate::organize::*;
 
-use crate::backend::*;
+use crate::datamanager::*;
 use egui::CollapsingHeader;
 use egui::{
     plot::{Bar, BarChart, Legend, Plot, PlotPoint},
@@ -67,29 +68,27 @@ impl Graph {
         let mut bar_charts: Vec<BarChart> = Vec::new();
         for (category, inner_map) in &map {
             // every category except the 'All' category (which shouldn't be in the data anyway) gets graphed
-            if *category != Category::All {
-                let bars: Vec<_> = inner_map
-                    .iter()
-                    .enumerate()
-                    .map(|(idx, (date, cost))| {
-                        Bar::new(counter + idx as f64 * self.settings.spacing(), *cost as f64)
-                            .fill(colors[colors_idx])
-                            .name(format!("{}: {}", date, category))
-                    })
-                    .collect();
+            let bars: Vec<_> = inner_map
+                .iter()
+                .enumerate()
+                .map(|(idx, (date, cost))| {
+                    Bar::new(counter + idx as f64 * self.settings.spacing(), *cost as f64)
+                        .fill(colors[colors_idx])
+                        .name(format!("{}: {}", date, category))
+                })
+                .collect();
 
-                let refs: Vec<&BarChart> = bar_charts.iter().collect();
-                let chart = BarChart::new(bars)
-                    .width(self.settings.width())
-                    .color(colors[colors_idx])
-                    .name(category.to_string())
-                    .stack_on(&refs[..]);
+            let refs: Vec<&BarChart> = bar_charts.iter().collect();
+            let chart = BarChart::new(bars)
+                .width(self.settings.width())
+                .color(colors[colors_idx])
+                .name(category.to_string())
+                .stack_on(&refs[..]);
 
-                bar_charts.push(chart);
+            bar_charts.push(chart);
 
-                // use a different color per category
-                colors_idx += 1;
-            }
+            // use a different color per category
+            colors_idx += 1;
         }
 
         bar_charts
@@ -226,7 +225,7 @@ impl GraphSettings {
     fn data_aspect(&self) -> f32 {
         self.data_aspect
     }
-    fn selected_categories(&self) -> Vec<Category> {
+    fn selected_categories(&self) -> Vec<CategoryName> {
         self.category_selector.selected_categories()
     }
 
@@ -237,6 +236,9 @@ impl GraphSettings {
 }
 
 /// Track what `Category`s we'd like to graph
+// TODO: move this to the category manager?
+// Otherwise we need to duplicate all the categories here...
+// and make sure they stay updated when someone adds new ones
 #[derive(Default, Clone)]
 struct CategorySelector {
     selections: HashMap<Category, bool>,

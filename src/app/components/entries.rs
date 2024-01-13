@@ -1,4 +1,4 @@
-use crate::backend::DataManager;
+use crate::datamanager::DataManager;
 use crate::organize::*;
 use egui::Ui;
 use strum::IntoEnumIterator;

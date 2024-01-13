@@ -1,4 +1,4 @@
-use crate::category::CategoryName;
+use crate::category::{CategoryName, CategoryManager};
 use crate::csvadapter::*;
 use crate::entry::{Cost, Entry};
 use crate::organize::*;
@@ -160,12 +160,12 @@ impl DataManager {
     /// Builds an ordered mapping for each date to the total spent on that date.
     /// order the category map so it's always sorted the same. If you use a hashmap it's in a different order for every
     /// frame, which makes them get a different color
-    pub fn cost_map(&self, group_by: GroupBy, categories: Vec<Category>) -> CostMap {
+    pub fn cost_map(&self, group_by: GroupBy, categories: Vec<CategoryName>) -> CostMap {
         if self.entries.is_empty() {
             return BTreeMap::new();
         }
         // build the cost map with zerod entries accordingly
-        let mut map = self.zero_cost_map(group_by);
+        let mut map = self.zero_cost_map(categories, group_by);
 
         // now track a sum for each date
         for entry in self.get_entries_iter(false) {
@@ -192,7 +192,7 @@ impl DataManager {
 
     // get the total spent in a given category given a category, month & year
     // NOTE: the 'day' component of 'date' is ignored, it's just simpler to have 1 parameter
-    pub fn monthly_cost(&self, _category: Category, _date: NaiveDate) -> f32 {
+    pub fn monthly_cost(&self, _category: CategoryName, _date: NaiveDate) -> f32 {
         0.0 // TODO: implement me
     }
 
@@ -225,12 +225,11 @@ impl DataManager {
     // 1/1/xxxx, 2/1/xxxx, 3/1/xxxx, etc for GroupBy::Month
     // 1/1/xxxx, 1/1/xxxx + 1, 1/1/xxxx + 2, for GroupBy::Year
     // Assumes the entry map has something in it.
-    fn zero_cost_map(&self, group_by: GroupBy) -> CostMap {
+    fn zero_cost_map(&self, categories: Vec<CategoryName>, group_by: GroupBy) -> CostMap {
         let (first, last) = self.entries_date_extremes();
         let first_days = first.unwrap().date.num_days_from_ce();
         let last_days = last.unwrap().date.num_days_from_ce();
-
-        Category::iter()
+        categories.iter()
             .map(|category| {
                 let dates = (first_days..=last_days)
                     .filter_map(|days| {
@@ -244,7 +243,7 @@ impl DataManager {
                     })
                     .map(|date| (date, 0.0))
                     .collect::<BTreeMap<NaiveDate, f32>>();
-                (category, dates)
+                (category.clone(), dates)
             })
             .collect()
     }
@@ -253,13 +252,14 @@ impl DataManager {
 mod tests {
     use super::*;
 
+    const CATEGORIES: [&str; 5] = ["test1", "test2", "test3", "test4", "test5"];
+
     fn random_category() -> CategoryName {
         use rand::Rng;
         use std::str::FromStr;
-        let tests = ["test1", "test2", "test3", "test4", "test5"];
         let mut rng = rand::thread_rng();
-        let index = rng.gen_range(0..tests.len());
-        let name = tests[index];
+        let index = rng.gen_range(0..CATEGORIES.len());
+        let name = CATEGORIES[index];
         CategoryName::from_str(name).unwrap()
     }
 
@@ -296,6 +296,7 @@ mod tests {
     #[test]
     fn test_cost_map() {
         use chrono::Duration;
+        use std::str::FromStr;
         let mut backend = DataManager::default();
         tests::_fill_entries(1_000_000, &mut backend);
 
@@ -303,8 +304,12 @@ mod tests {
         let first_days = first.unwrap().date.num_days_from_ce();
         let last_days = last.unwrap().date.num_days_from_ce();
 
-        let categories = Category::_get_all();
-        let map = backend.cost_map(GroupBy::Day, categories.clone());
+        let cat_names = CATEGORIES;
+        let mut categories = Vec::new();
+        for cat in cat_names.iter() {
+            categories.push(CategoryName::from_str(cat).unwrap());
+        }
+        let map = backend.cost_map(GroupBy::Day, categories.clone().to_vec());
 
         // map should have a key for every category
         assert!(categories.iter().all(|category| map.contains_key(category)));

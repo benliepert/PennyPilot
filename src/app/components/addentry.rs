@@ -1,4 +1,4 @@
-use crate::backend::DataManager;
+use crate::datamanager::DataManager;
 use crate::entry::{Cost, Entry};
 use chrono::NaiveDate;
 use egui::Ui;
