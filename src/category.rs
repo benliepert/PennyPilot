@@ -11,15 +11,17 @@ use crate::entry::Entry;
     Ord, PartialOrd, PartialEq, Eq, serde::Deserialize, serde::Serialize, Clone, Debug, Hash,
 )]
 pub struct CategoryName(String);
+
 impl std::error::Error for CategoryError {}
+
 impl FromStr for CategoryName {
     type Err = CategoryError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.chars().all(|c| c.is_alphabetic()) {
+        if !s.trim().is_empty() && s.chars().all(|c| c.is_alphabetic() || c.is_whitespace()) {
             Ok(CategoryName(s.to_lowercase()))
         } else {
-            Err(CategoryError::Invalid)
+            Err(CategoryError::Invalid(s.to_string()))
         }
     }
 }
@@ -39,21 +41,23 @@ pub struct CategoryManager {
     /// whether to warn the user when they exceed a category's spending limit
     // TODO: move this somewhere else?
     spending_warnings_enabled: bool,
+
+    new_category: String,
 }
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum CategoryError {
     /// The category already exists
-    Duplicate,
+    Duplicate(String),
     /// The category name is invalid
-    Invalid,
+    Invalid(String),
 }
 
 impl std::fmt::Display for CategoryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CategoryError::Duplicate => write!(f, "Category already exists"),
-            CategoryError::Invalid => write!(f, "Invalid category name"),
+            CategoryError::Duplicate(cat) => write!(f, "Category already exists: {cat}"),
+            CategoryError::Invalid(cat) => write!(f, "Invalid category name: {cat}"),
         }
     }
 }
@@ -68,7 +72,7 @@ impl CategoryManager {
 
         if self.categories.contains_key(&new_category) {
             debug!("Category already exists: {}", new_category);
-            return Err(CategoryError::Duplicate);
+            return Err(CategoryError::Duplicate(new_category.to_string()));
         }
 
         debug!("Adding category: {}", new_category);
@@ -119,7 +123,29 @@ impl CategoryManager {
     }
 
     pub fn editor_ui(&mut self, ui: &mut Ui) {
-        ui.label("Placeholder");
+        ui.horizontal(|ui| {
+            ui.text_edit_singleline(&mut self.new_category);
+            if ui.button("Add").clicked() {
+                if let Err(e) = self.add(self.new_category.clone()) {
+                    debug!("Failed to add category: {}", e);
+                }
+                self.new_category.clear();
+            }
+        });
+        ui.separator();
+        let mut to_delete = Vec::new();
+        for category in self.categories() {
+            ui.horizontal(|ui| {
+                ui.label(category.to_string());
+                if ui.button("Delete").clicked() {
+                    to_delete.push(category.clone());
+                }
+            });
+        }
+        for category in to_delete {
+            debug!("Deleting category: {}", category);
+            self.categories.remove(&category);
+        }
     }
 
     fn current_date() -> NaiveDate {
@@ -181,27 +207,28 @@ mod tests {
     fn add() {
         let mut manager = CategoryManager::default();
 
-        assert_eq!(manager.add("".to_string()), Err(CategoryError::Invalid));
-        assert_eq!(manager.add(" ".to_string()), Err(CategoryError::Invalid));
-        assert_eq!(
-            manager.add(" arsts ".to_string()),
-            Err(CategoryError::Invalid)
-        );
+        assert_eq!(manager.add("".to_string()), Err(CategoryError::Invalid("".to_string())));
+        assert_eq!(manager.add(" ".to_string()), Err(CategoryError::Invalid(" ".to_string())));
+
         assert_eq!(
             manager.add("_abcde!.eg/".to_string()),
-            Err(CategoryError::Invalid)
+            Err(CategoryError::Invalid("_abcde!.eg/".to_string()))
         );
 
         assert_eq!(manager.add("arsts".to_string()), Ok(()));
         assert_eq!(
             manager.add("ARSTS".to_string()),
-            Err(CategoryError::Duplicate)
+            Err(CategoryError::Duplicate("arsts".to_string()))
         );
         assert_eq!(
             manager.add("ArsTS".to_string()),
-            Err(CategoryError::Duplicate)
+            Err(CategoryError::Duplicate("arsts".to_string()))
         );
 
         assert_eq!(manager.add("validcategory".to_string()), Ok(()));
+        assert_eq!(
+            manager.add(" arsts ".to_string()),
+            Ok(())
+        );
     }
 }

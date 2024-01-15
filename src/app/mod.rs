@@ -54,7 +54,7 @@ impl Default for WindowState {
             entry_open: false,
             spending_limits_open: false,
             graph_settings_open: false,
-            category_editor_open: false,
+            category_editor_open: true,
 
             #[cfg(target_arch = "wasm32")]
             web_notice_open: true,
