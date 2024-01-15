@@ -1,4 +1,4 @@
-use crate::category::{CategoryName, CategoryManager};
+use crate::category::{CategoryManager, CategoryName};
 use crate::csvadapter::*;
 use crate::entry::{Cost, Entry};
 use crate::organize::*;
@@ -165,7 +165,7 @@ impl DataManager {
             return BTreeMap::new();
         }
         // build the cost map with zerod entries accordingly
-        let mut map = self.zero_cost_map(categories, group_by);
+        let mut map = self.zero_cost_map(&categories, group_by);
 
         // now track a sum for each date
         for entry in self.get_entries_iter(false) {
@@ -182,7 +182,7 @@ impl DataManager {
                 }
                 GroupBy::Year => NaiveDate::from_ymd_opt(entry.date.year(), 1, 1).unwrap(),
             };
-            let inner_map = map.entry(entry.category).or_default();
+            let inner_map = map.entry(entry.category.clone()).or_default();
             let sum = inner_map.entry(scaled_date).or_insert(0.0);
             let cost: f32 = entry.cost.into();
             *sum += cost;
@@ -192,7 +192,7 @@ impl DataManager {
 
     // get the total spent in a given category given a category, month & year
     // NOTE: the 'day' component of 'date' is ignored, it's just simpler to have 1 parameter
-    pub fn monthly_cost(&self, _category: CategoryName, _date: NaiveDate) -> f32 {
+    pub fn monthly_cost(&self, _category: &CategoryName, _date: &NaiveDate) -> f32 {
         0.0 // TODO: implement me
     }
 
@@ -225,11 +225,12 @@ impl DataManager {
     // 1/1/xxxx, 2/1/xxxx, 3/1/xxxx, etc for GroupBy::Month
     // 1/1/xxxx, 1/1/xxxx + 1, 1/1/xxxx + 2, for GroupBy::Year
     // Assumes the entry map has something in it.
-    fn zero_cost_map(&self, categories: Vec<CategoryName>, group_by: GroupBy) -> CostMap {
+    fn zero_cost_map(&self, categories: &Vec<CategoryName>, group_by: GroupBy) -> CostMap {
         let (first, last) = self.entries_date_extremes();
         let first_days = first.unwrap().date.num_days_from_ce();
         let last_days = last.unwrap().date.num_days_from_ce();
-        categories.iter()
+        categories
+            .iter()
             .map(|category| {
                 let dates = (first_days..=last_days)
                     .filter_map(|days| {

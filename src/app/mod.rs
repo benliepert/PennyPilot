@@ -12,7 +12,6 @@ use strum_macros::EnumIter;
 use crate::entry::Entry;
 #[cfg(target_arch = "wasm32")]
 use std::error::Error;
-
 #[cfg(target_arch = "wasm32")]
 use std::sync::{Arc, Mutex};
 
@@ -36,9 +35,9 @@ impl std::fmt::Display for SidePanelSelection {
 /// Track whether various windows are open
 pub struct WindowState {
     pub entry_open: bool,
-    // pub settings_open: bool,
     pub spending_limits_open: bool,
     pub graph_settings_open: bool,
+    pub category_editor_open: bool,
 
     #[cfg(target_arch = "wasm32")]
     pub web_notice_open: bool,
@@ -53,9 +52,9 @@ impl Default for WindowState {
     fn default() -> Self {
         Self {
             entry_open: false,
-            // settings_open: false,
             spending_limits_open: false,
             graph_settings_open: false,
+            category_editor_open: false,
 
             #[cfg(target_arch = "wasm32")]
             web_notice_open: true,
@@ -156,6 +155,14 @@ impl App {
             .vscroll(false)
             .show(ui.ctx(), |ui| {
                 self.graph.settings.ui(ui);
+            });
+
+        Window::new("Category Editor")
+            .open(&mut self.window_state.category_editor_open)
+            .default_size(vec2(200.0, 400.0))
+            .vscroll(false)
+            .show(ui.ctx(), |ui| {
+                self.cat_mgr.editor_ui(ui);
             });
 
         #[cfg(target_arch = "wasm32")]

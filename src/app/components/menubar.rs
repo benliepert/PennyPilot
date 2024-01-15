@@ -44,6 +44,15 @@ impl MenuBar {
                     {
                         app.window_state.spending_limits_open = true;
                     }
+                    if ui
+                        .add_enabled(
+                            !app.window_state.category_editor_open,
+                            egui::Button::new("Categories"),
+                        )
+                        .clicked()
+                    {
+                        app.window_state.category_editor_open = true;
+                    }
                 });
 
                 #[cfg(not(target_arch = "wasm32"))] // not supported on wasm

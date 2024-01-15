@@ -7,7 +7,9 @@ use std::str::FromStr;
 use crate::datamanager::DataManager;
 use crate::entry::Entry;
 
-#[derive(Ord, PartialOrd, PartialEq, Eq, serde::Deserialize, serde::Serialize, Clone, Debug)]
+#[derive(
+    Ord, PartialOrd, PartialEq, Eq, serde::Deserialize, serde::Serialize, Clone, Debug, Hash,
+)]
 pub struct CategoryName(String);
 impl std::error::Error for CategoryError {}
 impl FromStr for CategoryName {
@@ -116,6 +118,10 @@ impl CategoryManager {
             });
     }
 
+    pub fn editor_ui(&mut self, ui: &mut Ui) {
+        ui.label("Placeholder");
+    }
+
     fn current_date() -> NaiveDate {
         NaiveDate::from_ymd_opt(
             chrono::Local::now().year(),
@@ -144,7 +150,7 @@ impl CategoryManager {
             let today: NaiveDate = Self::current_date();
             if today.month() == entry.date.month() && today.year() == entry.date.year() {
                 // get the sum for entry.category for this date
-                let cost = backend.monthly_cost(entry.category, entry.date);
+                let cost = backend.monthly_cost(&entry.category, &entry.date);
 
                 if cost >= limit {
                     // limit has been met/exceeded!

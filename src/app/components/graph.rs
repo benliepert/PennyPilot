@@ -241,20 +241,24 @@ impl GraphSettings {
 // and make sure they stay updated when someone adds new ones
 #[derive(Default, Clone)]
 struct CategorySelector {
-    selections: HashMap<Category, bool>,
+    selections: HashMap<CategoryName, bool>,
 }
 
 impl CategorySelector {
     fn new() -> Self {
-        let selections = Category::iter().map(|category| (category, true)).collect();
+        let categories: Vec<CategoryName> = Vec::new();
+        let selections = categories
+            .iter()
+            .map(|category| (category.clone(), true))
+            .collect();
         CategorySelector { selections }
     }
 
-    fn selected_categories(&self) -> Vec<Category> {
+    fn selected_categories(&self) -> Vec<CategoryName> {
         self.selections
             .iter()
             .filter(|(_, &value)| value)
-            .map(|(&key, _)| key)
+            .map(|(&ref key, _)| key.clone())
             .collect()
     }
 
@@ -282,12 +286,17 @@ impl CategorySelector {
                 });
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.vertical(|ui| {
-                        Category::iter()
-                            .filter(|&category| category != Category::All)
+                        self.selections
+                            .keys()
+                            .cloned() // Clone the keys to avoid borrow issues
+                            .collect::<Vec<_>>() // Collect into a Vec to avoid borrow checker issues
+                            .iter() // Iterate over the cloned keys
                             .for_each(|category| {
                                 let label = category.to_string();
-                                let selected = self.selections.entry(category).or_insert(false);
-                                ui.checkbox(selected, &label);
+                                // Use `get_mut` instead of `entry` to avoid double mutable borrow
+                                if let Some(selected) = self.selections.get_mut(category) {
+                                    ui.checkbox(selected, &label);
+                                }
                             });
                     });
                 });

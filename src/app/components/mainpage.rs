@@ -29,7 +29,7 @@ impl MainPage {
         }
 
         // show the 'add entry' ui. Check spending limits if something was added
-        if let Some(entry) = app.add_entry_view.ui(ui, &mut app.data_mgr) {
+        if let Some(entry) = app.add_entry_view.ui(ui, &mut app.data_mgr, &app.cat_mgr) {
             debug!("Entry added! Checking spending limits.");
             app.cat_mgr.check_limit(&entry, &app.data_mgr);
         }
