@@ -66,7 +66,7 @@ impl Entries {
         egui::ScrollArea::vertical()
             // .max_width(400.0)
             .show(ui, |ui| {
-                if data_mgr.entries.is_empty() {
+                if data_mgr.has_entries() {
                     ui.label("(No Entries)");
                 }
                 let mut to_delete = Vec::new();
@@ -106,7 +106,7 @@ impl Entries {
                     if self.sort_order == SortOrder::Decreasing {
                         // it shouldn't be possible to delete an entry if there's nothing in the list
                         // if that happens, just let it panic on the invalid index
-                        idx = data_mgr.entries.len() - 1 - idx;
+                        idx = data_mgr.entries_len() - 1 - idx;
                     }
                     data_mgr.remove_entry_pos(idx);
                 }

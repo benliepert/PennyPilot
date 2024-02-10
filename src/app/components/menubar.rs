@@ -92,6 +92,10 @@ impl MenuBar {
         }
     }
 
+    // TODO: move the bulk of this to the app?
+    // I would say data mgr, but we need to update category mgr when updating data,
+    //  and I think it's better to have the app coordinate that than to have the datamgr have a
+    // dependency on the cat_mgr
     #[cfg(target_arch = "wasm32")]
     fn import_button(ui: &mut Ui, app: &mut App) {
         // TODO: add this button as enabled only when the file pick channel is None
@@ -130,7 +134,7 @@ impl MenuBar {
                     FileResponse::NoFile => debug!("Main thread registered: no file picked"),
                     FileResponse::FileData(data) => {
                         debug!("Main thread registered: data: {data:?}");
-                        app.data_mgr.entries = data;
+                        app.data_mgr.set_entries(data);
                         app.data_mgr.plot_reset_next_frame = true;
                     }
                     FileResponse::Error(e) => error!("Error from async file dialog: {e}"),
@@ -149,7 +153,7 @@ impl MenuBar {
             use std::io::Write;
             // collect our entry data in a buffer that we'll be writing out
             let mut buf = vec![];
-            for entry in &app.data_mgr.entries {
+            for entry in app.data_mgr.get_entries_iter(false) {
                 writeln!(buf, "{}", entry.to_csv_string());
             }
             wasm_bindgen_futures::spawn_local(async move {

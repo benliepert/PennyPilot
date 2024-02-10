@@ -3,7 +3,7 @@ use crate::csvadapter::*;
 use crate::entry::{Cost, Entry};
 use crate::organize::*;
 use chrono::{Datelike, NaiveDate};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 type Comparator = Box<dyn Fn(&Entry, &Entry) -> std::cmp::Ordering>;
@@ -19,7 +19,8 @@ pub struct DataManager {
 
     #[serde(skip)]
     // We don't serialize entries because the underlying data could have changed, so we reload it
-    pub entries: Vec<Entry>,
+    // private to gate category updates when we update entries from a file
+    entries: Vec<Entry>,
 
     #[serde(skip)]
     /// Was data loaded recently? This is meant to share state with the rest of the app.
@@ -59,12 +60,35 @@ impl DataManager {
 }
 
 impl DataManager {
+    pub fn has_entries(&self) -> bool {
+        !self.entries.is_empty()
+    }
+
+    pub fn entries_len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn set_entries(&mut self, entries: Vec<Entry>) {
+        self.entries = entries;
+
+        let unique_categories = DataManager::create_unique_category_set(&self.entries);
+
+        // tell the category mgr to append these categories
+    }
+
+    fn create_unique_category_set(entries: &Vec<Entry>) -> HashSet<CategoryName> {
+        entries
+            .into_iter()
+            .map(|entry| entry.category.clone())
+            .collect()
+    }
+
     pub fn read_entries_from_csv(&mut self, file_path: PathBuf) {
         let result = read_entries_from_file(&file_path);
 
         match result {
             Ok(entries) => {
-                self.entries = entries;
+                self.set_entries(entries);
                 // set some flag so we know to reset the plot
                 self.plot_reset_next_frame = true;
             }

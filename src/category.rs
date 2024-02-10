@@ -97,6 +97,26 @@ impl CategoryManager {
         Ok(())
     }
 
+    /// Append a list of categories to the manager. Duplicate categories are ignored.
+    fn append_categories<I>(&mut self, categories: I) -> Result<(), CategoryError>
+    where
+        I: IntoIterator<Item = CategoryName>,
+    {
+        for category in categories {
+            // converting to string is wasteful here, since we already have it as a CategoryName
+            match self.add(category.to_string()) {
+                Ok(_) => (),
+                Err(CategoryError::Duplicate(s)) => {
+                    debug!("Duplicate category '{s}' ignored.");
+                }
+                // all other errors are legit
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn selected_categories(&self) -> Vec<CategoryName> {
         self.categories
             .iter()
