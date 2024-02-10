@@ -48,7 +48,7 @@ impl AddEntry {
                         .prefix("$"),
                 );
                 egui::ComboBox::from_id_source("category")
-                    .selected_text(format!("{}", self.category))
+                    .selected_text(self.category.to_string())
                     // TODO: make width dynamic based on the widest category title
                     .width(150.0)
                     .show_ui(ui, |ui| {

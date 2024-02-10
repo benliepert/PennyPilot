@@ -35,7 +35,7 @@ impl MainPage {
         }
 
         // show the graph ui
-        app.graph.ui(ui, &mut app.data_mgr);
+        app.graph.ui(ui, &mut app.data_mgr, &app.cat_mgr);
     }
 
     fn links(ui: &mut Ui) {

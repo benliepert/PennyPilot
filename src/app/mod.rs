@@ -99,7 +99,7 @@ impl Default for App {
 
         Self {
             data_mgr: backend,
-            graph: Graph::default(),
+            graph: Graph::new(),
             add_entry_view: AddEntry::default(),
             window_state: WindowState::default(),
             entry_view,
@@ -154,7 +154,7 @@ impl App {
             .default_size(vec2(200.0, 400.0))
             .vscroll(false)
             .show(ui.ctx(), |ui| {
-                self.graph.settings.ui(ui);
+                self.graph.settings.ui(ui, &mut self.cat_mgr);
             });
 
         Window::new("Category Editor")

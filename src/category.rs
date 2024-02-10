@@ -32,11 +32,27 @@ impl fmt::Display for CategoryName {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct CategoryInfo {
+    pub limit: Option<f32>,
+    /// is the category displayed in the UI?
+    // This introduces some coupling, but I think it's fine since it keeps it simple
+    pub displayed: bool,
+}
+
+impl Default for CategoryInfo {
+    fn default() -> Self {
+        CategoryInfo {
+            limit: None,
+            displayed: true,
+        }
+    }
+}
+
 /// Stores user defined categories. Case insensitive. Also manages spending limits.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct CategoryManager {
-    /// every category has an optional spending limit
-    categories: BTreeMap<CategoryName, Option<f32>>,
+    pub categories: BTreeMap<CategoryName, CategoryInfo>,
 
     /// whether to warn the user when they exceed a category's spending limit
     // TODO: move this somewhere else?
@@ -76,8 +92,17 @@ impl CategoryManager {
         }
 
         debug!("Adding category: {}", new_category);
-        self.categories.insert(new_category, None);
+        self.categories
+            .insert(new_category, CategoryInfo::default());
         Ok(())
+    }
+
+    pub fn selected_categories(&self) -> Vec<CategoryName> {
+        self.categories
+            .iter()
+            .filter(|(_, &info)| info.displayed)
+            .map(|(key, _)| key.clone())
+            .collect()
     }
 
     /// Returns a list of all categories, sorted alphabetically
@@ -100,8 +125,9 @@ impl CategoryManager {
             .num_columns(2)
             .striped(true)
             .show(ui, |ui| {
-                for (category, limit) in self.categories.iter_mut() {
+                for (category, info) in self.categories.iter_mut() {
                     ui.horizontal(|ui| {
+                        let limit = &mut info.limit;
                         ui.label(category.to_string());
                         let mut display_value = limit.unwrap_or(0.0);
                         ui.add(
@@ -165,7 +191,7 @@ impl CategoryManager {
         }
 
         let cat_name = entry.category.clone();
-        if let Some(limit) = self.categories[&cat_name] {
+        if let Some(limit) = self.categories[&cat_name].limit {
             // get the sum of all items in the category for the month from the backend
             // what about retroactively adding entries? should we still be warned for those?
             // should check the relevant date range and only warn for items added in the current month?
@@ -207,8 +233,14 @@ mod tests {
     fn add() {
         let mut manager = CategoryManager::default();
 
-        assert_eq!(manager.add("".to_string()), Err(CategoryError::Invalid("".to_string())));
-        assert_eq!(manager.add(" ".to_string()), Err(CategoryError::Invalid(" ".to_string())));
+        assert_eq!(
+            manager.add("".to_string()),
+            Err(CategoryError::Invalid("".to_string()))
+        );
+        assert_eq!(
+            manager.add(" ".to_string()),
+            Err(CategoryError::Invalid(" ".to_string()))
+        );
 
         assert_eq!(
             manager.add("_abcde!.eg/".to_string()),
@@ -226,9 +258,6 @@ mod tests {
         );
 
         assert_eq!(manager.add("validcategory".to_string()), Ok(()));
-        assert_eq!(
-            manager.add(" arsts ".to_string()),
-            Ok(())
-        );
+        assert_eq!(manager.add(" arsts ".to_string()), Ok(()));
     }
 }

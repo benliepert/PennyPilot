@@ -1,4 +1,4 @@
-use crate::category::{CategoryManager, CategoryName};
+use crate::category::CategoryName;
 use crate::csvadapter::*;
 use crate::entry::{Cost, Entry};
 use crate::organize::*;
@@ -225,7 +225,7 @@ impl DataManager {
     // 1/1/xxxx, 2/1/xxxx, 3/1/xxxx, etc for GroupBy::Month
     // 1/1/xxxx, 1/1/xxxx + 1, 1/1/xxxx + 2, for GroupBy::Year
     // Assumes the entry map has something in it.
-    fn zero_cost_map(&self, categories: &Vec<CategoryName>, group_by: GroupBy) -> CostMap {
+    fn zero_cost_map(&self, categories: &[CategoryName], group_by: GroupBy) -> CostMap {
         let (first, last) = self.entries_date_extremes();
         let first_days = first.unwrap().date.num_days_from_ce();
         let last_days = last.unwrap().date.num_days_from_ce();

@@ -1,3 +1,5 @@
+use crate::category::CategoryInfo;
+use crate::category::CategoryManager;
 use crate::category::CategoryName;
 use crate::colors::*;
 use crate::organize::*;
@@ -8,7 +10,7 @@ use egui::{
     plot::{Bar, BarChart, Legend, Plot, PlotPoint},
     Grid, Response, Ui,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 use strum::IntoEnumIterator;
 
@@ -19,24 +21,6 @@ pub struct Graph {
 }
 
 const DATA_ASPECT: f32 = 0.5;
-impl Default for Graph {
-    fn default() -> Self {
-        let group_by = GroupBy::Month;
-
-        let (width, spacing) = get_width_spacing(group_by);
-
-        let settings = GraphSettings {
-            width,
-            spacing,
-            data_aspect: DATA_ASPECT,
-            theme: Theme::Sunset,
-            group_by,
-            category_selector: CategorySelector::new(),
-        };
-
-        Self { settings }
-    }
-}
 
 fn get_width_spacing(group_by: GroupBy) -> (f64, f64) {
     match group_by {
@@ -47,26 +31,41 @@ fn get_width_spacing(group_by: GroupBy) -> (f64, f64) {
 }
 
 impl Graph {
-    pub fn ui(&mut self, ui: &mut Ui, data_mgr: &mut DataManager) -> Response {
-        let chart = self.build_chart(data_mgr);
+    pub fn new() -> Self {
+        let group_by = GroupBy::Month;
+
+        let (width, spacing) = get_width_spacing(group_by);
+
+        let settings = GraphSettings {
+            width,
+            spacing,
+            data_aspect: DATA_ASPECT,
+            theme: Theme::Sunset,
+            group_by,
+        };
+
+        Self { settings }
+    }
+    pub fn ui(
+        &mut self,
+        ui: &mut Ui,
+        data_mgr: &mut DataManager,
+        cat_mgr: &CategoryManager,
+    ) -> Response {
+        let chart = self.build_chart(data_mgr, cat_mgr);
         self.plot(ui, chart, &mut data_mgr.plot_reset_next_frame)
     }
 
-    fn build_chart(&self, backend: &DataManager) -> Vec<BarChart> {
-        let map = backend.cost_map(
-            self.settings.group_by(),
-            self.settings.selected_categories(),
-        );
+    fn build_chart(&self, data_mgr: &DataManager, cat_mgr: &CategoryManager) -> Vec<BarChart> {
+        let map = data_mgr.cost_map(self.settings.group_by(), cat_mgr.selected_categories());
 
         // TODO: calculate this based on width as well since a wide bar will pass over the line x = 0
         // used to track spacing between bars
         let counter = self.settings.spacing() / 2.0;
 
         let colors = self.settings.theme().colors();
-        let mut colors_idx = 0;
-
         let mut bar_charts: Vec<BarChart> = Vec::new();
-        for (category, inner_map) in &map {
+        for (colors_idx, (category, inner_map)) in map.iter().enumerate() {
             // every category except the 'All' category (which shouldn't be in the data anyway) gets graphed
             let bars: Vec<_> = inner_map
                 .iter()
@@ -86,9 +85,6 @@ impl Graph {
                 .stack_on(&refs[..]);
 
             bar_charts.push(chart);
-
-            // use a different color per category
-            colors_idx += 1;
         }
 
         bar_charts
@@ -132,7 +128,7 @@ impl Graph {
 
 /// Store settings related to `Graph`. Can draw an egui UI that edits itself.
 /// Only editable via the UI.
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct GraphSettings {
     width: f64,
     spacing: f64,
@@ -140,12 +136,10 @@ pub struct GraphSettings {
 
     theme: Theme,
     group_by: GroupBy,
-    category_selector: CategorySelector,
 }
 
 impl GraphSettings {
-    // TODO: is it OK for this not to return a response?
-    pub fn ui(&mut self, ui: &mut Ui) {
+    pub fn ui(&mut self, ui: &mut Ui, cat_mgr: &mut CategoryManager) {
         Grid::new("grid")
             .num_columns(2)
             .spacing([40.0, 4.0])
@@ -200,7 +194,55 @@ impl GraphSettings {
                 }
             });
         });
-        self.category_selector.show(ui);
+        self.display_category_ui(ui, &mut cat_mgr.categories);
+    }
+
+    // passing the whole name : info map for simplicity, even though we use whether it's displayed or not
+    fn display_category_ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        categories: &mut BTreeMap<CategoryName, CategoryInfo>,
+    ) {
+        CollapsingHeader::new("Displayed Categories:")
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let all_true = categories.iter().all(|(_, &info)| info.displayed);
+                    let all_false = categories.iter().all(|(_, &info)| !info.displayed);
+                    if ui
+                        .add_enabled(!all_true, egui::Button::new("Select All"))
+                        .clicked()
+                    {
+                        categories
+                            .values_mut()
+                            .for_each(|info| info.displayed = true);
+                    };
+                    if ui
+                        .add_enabled(!all_false, egui::Button::new("Deselect All"))
+                        .clicked()
+                    {
+                        categories
+                            .values_mut()
+                            .for_each(|info| info.displayed = false);
+                    }
+                });
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        categories
+                            .keys()
+                            .cloned() // Clone the keys to avoid borrow issues
+                            .collect::<Vec<_>>() // Collect into a Vec to avoid borrow checker issues
+                            .iter() // Iterate over the cloned keys
+                            .for_each(|category| {
+                                let label = category.to_string();
+                                // Use `get_mut` instead of `entry` to avoid double mutable borrow
+                                if let Some(info) = categories.get_mut(category) {
+                                    ui.checkbox(&mut info.displayed, &label);
+                                }
+                            });
+                    });
+                });
+            });
     }
 }
 
@@ -219,87 +261,17 @@ impl GraphSettings {
     fn width(&self) -> f64 {
         self.width
     }
+
     fn spacing(&self) -> f64 {
         self.spacing
     }
+
     fn data_aspect(&self) -> f32 {
         self.data_aspect
-    }
-    fn selected_categories(&self) -> Vec<CategoryName> {
-        self.category_selector.selected_categories()
     }
 
     fn reset_bar_sizing(&mut self) {
         (self.width, self.spacing) = get_width_spacing(self.group_by);
         self.data_aspect = DATA_ASPECT;
-    }
-}
-
-/// Track what `Category`s we'd like to graph
-// TODO: move this to the category manager?
-// Otherwise we need to duplicate all the categories here...
-// and make sure they stay updated when someone adds new ones
-#[derive(Default, Clone)]
-struct CategorySelector {
-    selections: HashMap<CategoryName, bool>,
-}
-
-impl CategorySelector {
-    fn new() -> Self {
-        let categories: Vec<CategoryName> = Vec::new();
-        let selections = categories
-            .iter()
-            .map(|category| (category.clone(), true))
-            .collect();
-        CategorySelector { selections }
-    }
-
-    fn selected_categories(&self) -> Vec<CategoryName> {
-        self.selections
-            .iter()
-            .filter(|(_, &value)| value)
-            .map(|(&ref key, _)| key.clone())
-            .collect()
-    }
-
-    fn show(&mut self, ui: &mut egui::Ui) {
-        CollapsingHeader::new("Displayed Categories:")
-            .default_open(false)
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    let all_true = self.selections.iter().all(|(_, &value)| value);
-                    let all_false = self.selections.iter().all(|(_, &value)| !value);
-                    if ui
-                        .add_enabled(!all_true, egui::Button::new("Select All"))
-                        .clicked()
-                    {
-                        self.selections.values_mut().for_each(|value| *value = true);
-                    };
-                    if ui
-                        .add_enabled(!all_false, egui::Button::new("Deselect All"))
-                        .clicked()
-                    {
-                        self.selections
-                            .values_mut()
-                            .for_each(|value| *value = false);
-                    }
-                });
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.vertical(|ui| {
-                        self.selections
-                            .keys()
-                            .cloned() // Clone the keys to avoid borrow issues
-                            .collect::<Vec<_>>() // Collect into a Vec to avoid borrow checker issues
-                            .iter() // Iterate over the cloned keys
-                            .for_each(|category| {
-                                let label = category.to_string();
-                                // Use `get_mut` instead of `entry` to avoid double mutable borrow
-                                if let Some(selected) = self.selections.get_mut(category) {
-                                    ui.checkbox(selected, &label);
-                                }
-                            });
-                    });
-                });
-            });
     }
 }
