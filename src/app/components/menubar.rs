@@ -123,24 +123,23 @@ impl MenuBar {
             });
         }
 
-        let mut data_opt = None;
+        let mut data_opt = None; // necessary so we don't borrow as mutable twice
+                                 // eventually (potentially many frames later), the async thread will update the file_pick object with the byte data
         if let Ok(mut response) = app.file_pick.try_lock() {
             if let Some(pick) = response.take() {
-                debug!("Processing data from async file dialog...");
                 match pick {
                     FileResponse::NoFile => debug!("Main thread registered: no file picked"),
                     FileResponse::FileData(data) => {
-                        debug!("Main thread registered: data: {data:?}");
+                        debug!("Registered: data: {data:?}");
                         data_opt = Some(data);
                     }
                 }
-                debug!("Match complete");
-                // we've consumed the response, we don't need this anymore
+
+                // we've consumed the response
                 *response = None;
             }
         }
         if let Some(data) = data_opt {
-            debug!("Received data. Importing");
             app.import_entry_byte_vec(data);
         }
     }

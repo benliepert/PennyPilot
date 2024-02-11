@@ -147,7 +147,6 @@ impl App {
             Ok(entries) => entries,
             Err(e) => {
                 let text = format!("Error reading entries from file: {e}");
-                error!("{text}");
                 self.show_import_error(text);
                 return;
             }
@@ -160,22 +159,19 @@ impl App {
     }
 
     fn show_import_error(&mut self, text: String) {
+        error!("{text}");
         self.import_error.set_contents(text);
         self.window_state.failed_to_import_open = true;
     }
 
     #[cfg(target_arch = "wasm32")]
     fn import_entry_byte_vec(&mut self, buffer: Vec<u8>) {
-        let entries = match read_entries_from_vec(buffer) {
-            Ok(entries) => entries,
+        match read_entries_from_vec(buffer) {
+            Ok(entries) => self.import_entry_vec(entries),
             Err(e) => {
-                let text = format!("Error reading entries from file: {e}");
-                error!("{text}");
-                self.show_import_error(text);
-                return;
+                self.show_import_error(format!("Error reading entries from file: {e}"));
             }
         };
-        self.import_entry_vec(entries);
     }
 
     /// Import a vector of entries. This doesn't preserve any existing entries.
