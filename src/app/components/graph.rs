@@ -18,6 +18,8 @@ use strum::IntoEnumIterator;
 pub struct Graph {
     // the graph settings window
     pub settings: GraphSettings,
+
+    pub plot_reset_next_frame: bool,
 }
 
 const DATA_ASPECT: f32 = 0.5;
@@ -30,8 +32,8 @@ fn get_width_spacing(group_by: GroupBy) -> (f64, f64) {
     }
 }
 
-impl Graph {
-    pub fn new() -> Self {
+impl Default for Graph {
+    fn default() -> Self {
         let group_by = GroupBy::Month;
 
         let (width, spacing) = get_width_spacing(group_by);
@@ -44,8 +46,14 @@ impl Graph {
             group_by,
         };
 
-        Self { settings }
+        Self {
+            settings,
+            plot_reset_next_frame: false,
+        }
     }
+}
+
+impl Graph {
     pub fn ui(
         &mut self,
         ui: &mut Ui,
@@ -53,7 +61,7 @@ impl Graph {
         cat_mgr: &CategoryManager,
     ) -> Response {
         let chart = self.build_chart(data_mgr, cat_mgr);
-        self.plot(ui, chart, &mut data_mgr.plot_reset_next_frame)
+        self.plot(ui, chart)
     }
 
     fn build_chart(&self, data_mgr: &DataManager, cat_mgr: &CategoryManager) -> Vec<BarChart> {
@@ -91,7 +99,7 @@ impl Graph {
     }
 
     /// Plot various bar charts on a ui
-    fn plot(&self, ui: &mut Ui, charts: Vec<BarChart>, data_loaded: &mut bool) -> Response {
+    fn plot(&mut self, ui: &mut Ui, charts: Vec<BarChart>) -> Response {
         // no x labels until (if) I can get custom labels working
         let x_fmt = |_x, _range: &RangeInclusive<f64>| String::new();
 
@@ -110,9 +118,9 @@ impl Graph {
             .label_formatter(label_fmt);
 
         // Reset the plot if data was loaded
-        if *data_loaded {
-            debug!("Plot detected data was loaded!");
-            *data_loaded = false;
+        if self.plot_reset_next_frame {
+            debug!("Plot detected data was loaded! Resetting plot view");
+            self.plot_reset_next_frame = false;
             plot = plot.reset();
         }
 

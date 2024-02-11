@@ -32,6 +32,8 @@ impl fmt::Display for CategoryName {
     }
 }
 
+/// Store info about a category. Includes an optional spending limit and whether the category should be displayed
+/// in the graph UI.
 #[derive(Debug, Copy, Clone)]
 pub struct CategoryInfo {
     pub limit: Option<f32>,
@@ -55,7 +57,6 @@ pub struct CategoryManager {
     pub categories: BTreeMap<CategoryName, CategoryInfo>,
 
     /// whether to warn the user when they exceed a category's spending limit
-    // TODO: move this somewhere else?
     spending_warnings_enabled: bool,
 
     new_category: String,

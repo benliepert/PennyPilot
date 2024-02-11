@@ -101,7 +101,7 @@ impl Default for App {
 
         Self {
             data_mgr: backend,
-            graph: Graph::new(),
+            graph: Graph::default(),
             add_entry_view: AddEntry::default(),
             window_state: WindowState::default(),
             entry_view,
@@ -165,10 +165,8 @@ impl App {
             }
         }
 
-        // why is this bool part of the data mgr lol?
-        // now that we oversee this at the app level, check if this bool is used anywhere else, and just move the flag
-        // to the graph since the app knows about it.
-        self.data_mgr.plot_reset_next_frame = true;
+        // we just reloaded the entries - tell the graph to reset itself
+        self.graph.plot_reset_next_frame = true;
     }
 
     fn create_unique_category_set(entries: &[Entry]) -> HashSet<CategoryName> {
