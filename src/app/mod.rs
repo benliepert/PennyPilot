@@ -1,5 +1,7 @@
-use crate::category::CategoryManager;
+use crate::category::{CategoryManager, CategoryName};
+use crate::csvadapter::read_entries_from_file;
 use crate::datamanager::DataManager;
+use crate::entry::Entry;
 
 mod components;
 mod egui_app;
@@ -8,10 +10,10 @@ use components::{AddEntry, Entries, Graph};
 use egui::{vec2, Ui, Window};
 use strum_macros::EnumIter;
 
-#[cfg(target_arch = "wasm32")]
-use crate::entry::Entry;
+use std::collections::HashSet;
 #[cfg(target_arch = "wasm32")]
 use std::error::Error;
+use std::path::PathBuf;
 #[cfg(target_arch = "wasm32")]
 use std::sync::{Arc, Mutex};
 
@@ -128,6 +130,49 @@ impl App {
         // register_fonts(&mut style);
 
         Default::default()
+    }
+
+    /// Load a file from the user on native
+    ///
+    /// For wasm handling, see MenuBar::import_button()
+    fn import_entries_file(&mut self, file_path: PathBuf) {
+        let entries = match read_entries_from_file(&file_path) {
+            Ok(entries) => entries,
+            Err(e) => {
+                error!("Error reading entries from file: {}", e);
+                // TODO: show a message to the user
+                return;
+            }
+        };
+        if self.data_mgr.active_file != Some(file_path.clone()) {
+            self.data_mgr.active_file = Some(file_path);
+            // self.serialize_backend();
+        }
+        self.import_entry_vec(entries);
+    }
+
+    /// Import a vector of entries. This doesn't preserve any existing entries.
+    fn import_entry_vec(&mut self, entries: Vec<Entry>) {
+        info!("Importing entry vector");
+        let unique_categories = Self::create_unique_category_set(&entries);
+        self.data_mgr.set_entries(entries);
+
+        info!("Appended categories: {unique_categories:?}");
+        match self.cat_mgr.append_categories(unique_categories) {
+            Ok(_) => (),
+            Err(e) => {
+                error!("Error appending categories: {}", e);
+            }
+        }
+
+        // why is this bool part of the data mgr lol?
+        // now that we oversee this at the app level, check if this bool is used anywhere else, and just move the flag
+        // to the graph since the app knows about it.
+        self.data_mgr.plot_reset_next_frame = true;
+    }
+
+    fn create_unique_category_set(entries: &[Entry]) -> HashSet<CategoryName> {
+        entries.iter().map(|entry| entry.category.clone()).collect()
     }
 
     /// Display various windows based on window state

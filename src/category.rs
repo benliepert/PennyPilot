@@ -98,7 +98,7 @@ impl CategoryManager {
     }
 
     /// Append a list of categories to the manager. Duplicate categories are ignored.
-    fn append_categories<I>(&mut self, categories: I) -> Result<(), CategoryError>
+    pub fn append_categories<I>(&mut self, categories: I) -> Result<(), CategoryError>
     where
         I: IntoIterator<Item = CategoryName>,
     {

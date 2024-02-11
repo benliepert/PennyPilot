@@ -71,7 +71,7 @@ impl MenuBar {
                 .pick_file();
 
             if let Some(file_path) = file {
-                app.data_mgr.read_entries_from_csv(file_path);
+                app.import_entries_file(file_path);
             }
         }
     }
@@ -92,10 +92,6 @@ impl MenuBar {
         }
     }
 
-    // TODO: move the bulk of this to the app?
-    // I would say data mgr, but we need to update category mgr when updating data,
-    //  and I think it's better to have the app coordinate that than to have the datamgr have a
-    // dependency on the cat_mgr
     #[cfg(target_arch = "wasm32")]
     fn import_button(ui: &mut Ui, app: &mut App) {
         // TODO: add this button as enabled only when the file pick channel is None
@@ -127,6 +123,7 @@ impl MenuBar {
             });
         }
 
+        let mut data_opt = None;
         if let Ok(mut response) = app.file_pick.try_lock() {
             if let Some(pick) = response.take() {
                 debug!("Processing data from async file dialog...");
@@ -134,14 +131,17 @@ impl MenuBar {
                     FileResponse::NoFile => debug!("Main thread registered: no file picked"),
                     FileResponse::FileData(data) => {
                         debug!("Main thread registered: data: {data:?}");
-                        app.data_mgr.set_entries(data);
-                        app.data_mgr.plot_reset_next_frame = true;
+                        // app.import_entry_vec(data);
+                        data_opt = Some(data);
                     }
                     FileResponse::Error(e) => error!("Error from async file dialog: {e}"),
                 }
                 // we've consumed the response, we don't need this anymore
                 *response = None;
             }
+        }
+        if let Some(data) = data_opt {
+            app.import_entry_vec(data);
         }
     }
 
