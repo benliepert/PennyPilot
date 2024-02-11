@@ -40,6 +40,7 @@ pub struct WindowState {
     pub spending_limits_open: bool,
     pub graph_settings_open: bool,
     pub category_editor_open: bool,
+    pub failed_to_import_open: bool,
 
     #[cfg(target_arch = "wasm32")]
     pub web_notice_open: bool,
@@ -56,7 +57,8 @@ impl Default for WindowState {
             entry_open: false,
             spending_limits_open: false,
             graph_settings_open: false,
-            category_editor_open: true,
+            category_editor_open: false,
+            failed_to_import_open: false,
 
             #[cfg(target_arch = "wasm32")]
             web_notice_open: true,
@@ -82,6 +84,8 @@ pub struct App {
     pub add_entry_view: AddEntry,
     pub graph: Graph,
 
+    import_error: Popup,
+
     #[cfg(target_arch = "wasm32")]
     // Handle asynchronous file import on wasm
     pub file_pick: Arc<Mutex<Option<FileResponse>>>,
@@ -101,11 +105,12 @@ impl Default for App {
 
         Self {
             data_mgr: backend,
-            graph: Graph::default(),
-            add_entry_view: AddEntry::default(),
-            window_state: WindowState::default(),
             entry_view,
+            import_error: Popup::default(),
+            graph: Graph::default(),
             cat_mgr: CategoryManager::default(),
+            window_state: WindowState::default(),
+            add_entry_view: AddEntry::default(),
             #[cfg(target_arch = "wasm32")]
             file_pick: Arc::new(Mutex::new(None)),
         }
@@ -139,8 +144,9 @@ impl App {
         let entries = match read_entries_from_file(&file_path) {
             Ok(entries) => entries,
             Err(e) => {
-                error!("Error reading entries from file: {}", e);
-                // TODO: show a message to the user
+                let text =format!("Error reading entries from file: {e}");
+                error!("{text}");
+                self.import_error(text);
                 return;
             }
         };
@@ -149,6 +155,13 @@ impl App {
             // self.serialize_backend();
         }
         self.import_entry_vec(entries);
+    }
+
+    fn import_error(&mut self, text: String) {
+        debug!("Import error!");
+        self.import_error.set_contents(text);
+        // open the import error popup
+        self.window_state.failed_to_import_open = true;
     }
 
     /// Import a vector of entries. This doesn't preserve any existing entries.
@@ -161,7 +174,9 @@ impl App {
         match self.cat_mgr.append_categories(unique_categories) {
             Ok(_) => (),
             Err(e) => {
-                error!("Error appending categories: {}", e);
+                let text = format!("Error appending categories: {e}");
+                error!("{text}");
+                self.import_error(text);
             }
         }
 
@@ -208,6 +223,12 @@ impl App {
                 self.cat_mgr.editor_ui(ui);
             });
 
+        Window::new("Import Error")
+            .open(&mut self.window_state.failed_to_import_open) // Bind the open state to show_popup
+            .show(ui.ctx(), |ui| {
+                self.import_error.ui(ui);
+            });
+
         #[cfg(target_arch = "wasm32")]
         egui::Window::new("Web Notice")
             .open(&mut self.window_state.web_notice_open)
@@ -216,5 +237,23 @@ impl App {
             .show(ui.ctx(), |ui| {
                 ui.label("Hey! Thanks for using PennyPilot on the web.\nNote: You MUST export data via file -> export in order for it to be saved!");
             });
+    }
+}
+
+/// A simple popup to the user
+#[derive(Default)]
+struct Popup {
+    contents: String,
+}
+
+impl Popup {
+    fn set_contents(&mut self, contents: String) {
+        debug!("Setting popup contents to: {contents}");
+        self.contents = contents;
+    }
+
+    fn ui(&self, ui: &mut Ui) {
+        ui.visuals_mut().override_text_color = Some(egui::Color32::RED);
+        ui.label(&self.contents);
     }
 }
