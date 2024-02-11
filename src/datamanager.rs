@@ -1,6 +1,6 @@
 use crate::category::CategoryName;
 use crate::csvadapter::*;
-use crate::entry::{Cost, Entry};
+use crate::entry::Entry;
 use crate::organize::*;
 use chrono::{Datelike, NaiveDate};
 use std::collections::BTreeMap;
@@ -245,11 +245,13 @@ impl DataManager {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    const CATEGORIES: [&str; 5] = ["test1", "test2", "test3", "test4", "test5"];
+    const CATEGORIES: [&str; 5] = ["testa", "testb", "testc", "testd", "teste"];
 
+    #[cfg(test)]
     fn random_category() -> CategoryName {
         use rand::Rng;
         use std::str::FromStr;
@@ -260,7 +262,8 @@ mod tests {
     }
 
     /// Modify the backend in place. give it a random list of (sorted) entries of a particular size
-    fn _fill_entries(size: usize, backend: &mut DataManager) {
+    #[cfg(test)]
+    fn fill_entries(size: usize, backend: &mut DataManager) {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         let mut entries = Vec::with_capacity(size);
@@ -278,7 +281,7 @@ mod tests {
 
             entries.push(Entry {
                 name: format!("entry{}", i),
-                cost: Cost::try_from(rng.gen_range(1.0..=500.0)).unwrap(),
+                cost: crate::entry::Cost::try_from(rng.gen_range(1.0..=500.0)).unwrap(),
                 date,
                 category: random_category(),
             });
@@ -290,11 +293,11 @@ mod tests {
 
     /// TODO: make this work for other groupings
     #[test]
-    fn test_cost_map() {
+    fn cost_map() {
         use chrono::Duration;
         use std::str::FromStr;
         let mut backend = DataManager::default();
-        tests::_fill_entries(1_000_000, &mut backend);
+        tests::fill_entries(1_000_000, &mut backend);
 
         let (first, last) = backend.entries_date_extremes();
         let first_days = first.unwrap().date.num_days_from_ce();

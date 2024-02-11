@@ -246,6 +246,7 @@ impl CategoryManager {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
