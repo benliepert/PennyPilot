@@ -1,5 +1,7 @@
 use crate::category::{CategoryManager, CategoryName};
 use crate::csvadapter::read_entries_from_file;
+#[cfg(target_arch = "wasm32")]
+use crate::csvadapter::read_entries_from_vec;
 use crate::datamanager::DataManager;
 use crate::entry::Entry;
 
@@ -71,8 +73,8 @@ impl Default for WindowState {
 #[cfg(target_arch = "wasm32")]
 pub enum FileResponse {
     NoFile,
-    FileData(Vec<Entry>),
-    Error(Box<dyn Error>),
+    FileData(Vec<u8>),
+    // Error(Box<dyn Error>),
 }
 
 pub struct App {
@@ -144,9 +146,9 @@ impl App {
         let entries = match read_entries_from_file(&file_path) {
             Ok(entries) => entries,
             Err(e) => {
-                let text =format!("Error reading entries from file: {e}");
+                let text = format!("Error reading entries from file: {e}");
                 error!("{text}");
-                self.import_error(text);
+                self.show_import_error(text);
                 return;
             }
         };
@@ -157,11 +159,23 @@ impl App {
         self.import_entry_vec(entries);
     }
 
-    fn import_error(&mut self, text: String) {
-        debug!("Import error!");
+    fn show_import_error(&mut self, text: String) {
         self.import_error.set_contents(text);
-        // open the import error popup
         self.window_state.failed_to_import_open = true;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn import_entry_byte_vec(&mut self, buffer: Vec<u8>) {
+        let entries = match read_entries_from_vec(buffer) {
+            Ok(entries) => entries,
+            Err(e) => {
+                let text = format!("Error reading entries from file: {e}");
+                error!("{text}");
+                self.show_import_error(text);
+                return;
+            }
+        };
+        self.import_entry_vec(entries);
     }
 
     /// Import a vector of entries. This doesn't preserve any existing entries.
@@ -173,10 +187,10 @@ impl App {
         info!("Appended categories: {unique_categories:?}");
         match self.cat_mgr.append_categories(unique_categories) {
             Ok(_) => (),
+
+            // should be impossible to get an error here, we're already dealing with Entrys
             Err(e) => {
-                let text = format!("Error appending categories: {e}");
-                error!("{text}");
-                self.import_error(text);
+                unreachable!("We're already processing categories. Any errors should be impossible. Error was: {e}");
             }
         }
 

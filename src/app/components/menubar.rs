@@ -97,6 +97,8 @@ impl MenuBar {
         // TODO: add this button as enabled only when the file pick channel is None
         // TODO: genericize the interface to get the path and load the file for native + wasm
         //      impl a new trait for PathBuf and rfd::FilePath so we can read each from a csv
+
+        use std::fs::File;
         if ui.button("Import").clicked() {
             let file_pick_clone = app.file_pick.clone();
 
@@ -113,11 +115,9 @@ impl MenuBar {
                     }
                     Some(handle) => {
                         use crate::csvadapter::read_entries_from_vec;
+                        debug!("File selected. Reading data...");
                         let data = handle.read().await;
-                        match read_entries_from_vec(data) {
-                            Ok(entry_vec) => Some(FileResponse::FileData(entry_vec)),
-                            Err(e) => Some(FileResponse::Error(e)),
-                        }
+                        Some(FileResponse::FileData(data))
                     }
                 };
             });
@@ -131,17 +131,17 @@ impl MenuBar {
                     FileResponse::NoFile => debug!("Main thread registered: no file picked"),
                     FileResponse::FileData(data) => {
                         debug!("Main thread registered: data: {data:?}");
-                        // app.import_entry_vec(data);
                         data_opt = Some(data);
                     }
-                    FileResponse::Error(e) => error!("Error from async file dialog: {e}"),
                 }
+                debug!("Match complete");
                 // we've consumed the response, we don't need this anymore
                 *response = None;
             }
         }
         if let Some(data) = data_opt {
-            app.import_entry_vec(data);
+            debug!("Received data. Importing");
+            app.import_entry_byte_vec(data);
         }
     }
 
