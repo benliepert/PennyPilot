@@ -44,6 +44,15 @@ impl MenuBar {
                     {
                         app.window_state.spending_limits_open = true;
                     }
+                    if ui
+                        .add_enabled(
+                            !app.window_state.category_editor_open,
+                            egui::Button::new("Categories"),
+                        )
+                        .clicked()
+                    {
+                        app.window_state.category_editor_open = true;
+                    }
                 });
 
                 #[cfg(not(target_arch = "wasm32"))] // not supported on wasm
@@ -62,7 +71,7 @@ impl MenuBar {
                 .pick_file();
 
             if let Some(file_path) = file {
-                app.data_mgr.read_entries_from_csv(file_path);
+                app.import_entries_file(file_path);
             }
         }
     }
@@ -88,6 +97,8 @@ impl MenuBar {
         // TODO: add this button as enabled only when the file pick channel is None
         // TODO: genericize the interface to get the path and load the file for native + wasm
         //      impl a new trait for PathBuf and rfd::FilePath so we can read each from a csv
+
+        use std::fs::File;
         if ui.button("Import").clicked() {
             let file_pick_clone = app.file_pick.clone();
 
@@ -104,31 +115,32 @@ impl MenuBar {
                     }
                     Some(handle) => {
                         use crate::csvadapter::read_entries_from_vec;
+                        debug!("File selected. Reading data...");
                         let data = handle.read().await;
-                        match read_entries_from_vec(data) {
-                            Ok(entry_vec) => Some(FileResponse::FileData(entry_vec)),
-                            Err(e) => Some(FileResponse::Error(e)),
-                        }
+                        Some(FileResponse::FileData(data))
                     }
                 };
             });
         }
 
+        let mut data_opt = None; // necessary so we don't borrow as mutable twice
+                                 // eventually (potentially many frames later), the async thread will update the file_pick object with the byte data
         if let Ok(mut response) = app.file_pick.try_lock() {
             if let Some(pick) = response.take() {
-                debug!("Processing data from async file dialog...");
                 match pick {
                     FileResponse::NoFile => debug!("Main thread registered: no file picked"),
                     FileResponse::FileData(data) => {
-                        debug!("Main thread registered: data: {data:?}");
-                        app.data_mgr.entries = data;
-                        app.data_mgr.plot_reset_next_frame = true;
+                        debug!("Registered: data: {data:?}");
+                        data_opt = Some(data);
                     }
-                    FileResponse::Error(e) => error!("Error from async file dialog: {e}"),
                 }
-                // we've consumed the response, we don't need this anymore
+
+                // we've consumed the response
                 *response = None;
             }
+        }
+        if let Some(data) = data_opt {
+            app.import_entry_byte_vec(data);
         }
     }
 
@@ -140,7 +152,7 @@ impl MenuBar {
             use std::io::Write;
             // collect our entry data in a buffer that we'll be writing out
             let mut buf = vec![];
-            for entry in &app.data_mgr.entries {
+            for entry in app.data_mgr.get_entries_iter(false) {
                 writeln!(buf, "{}", entry.to_csv_string());
             }
             wasm_bindgen_futures::spawn_local(async move {

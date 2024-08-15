@@ -1,17 +1,21 @@
-use crate::backend::DataManager;
+use crate::category::{CategoryManager, CategoryName};
+use crate::csvadapter::read_entries_from_file;
+#[cfg(target_arch = "wasm32")]
+use crate::csvadapter::read_entries_from_vec;
+use crate::datamanager::DataManager;
+use crate::entry::Entry;
 
 mod components;
 mod egui_app;
 
-use components::{AddEntry, Entries, Graph, Limits};
+use components::{AddEntry, Entries, Graph};
 use egui::{vec2, Ui, Window};
 use strum_macros::EnumIter;
 
-#[cfg(target_arch = "wasm32")]
-use crate::entry::Entry;
+use std::collections::HashSet;
 #[cfg(target_arch = "wasm32")]
 use std::error::Error;
-
+use std::path::PathBuf;
 #[cfg(target_arch = "wasm32")]
 use std::sync::{Arc, Mutex};
 
@@ -35,9 +39,10 @@ impl std::fmt::Display for SidePanelSelection {
 /// Track whether various windows are open
 pub struct WindowState {
     pub entry_open: bool,
-    // pub settings_open: bool,
     pub spending_limits_open: bool,
     pub graph_settings_open: bool,
+    pub category_editor_open: bool,
+    pub failed_to_import_open: bool,
 
     #[cfg(target_arch = "wasm32")]
     pub web_notice_open: bool,
@@ -52,9 +57,10 @@ impl Default for WindowState {
     fn default() -> Self {
         Self {
             entry_open: false,
-            // settings_open: false,
             spending_limits_open: false,
             graph_settings_open: false,
+            category_editor_open: false,
+            failed_to_import_open: false,
 
             #[cfg(target_arch = "wasm32")]
             web_notice_open: true,
@@ -67,18 +73,20 @@ impl Default for WindowState {
 #[cfg(target_arch = "wasm32")]
 pub enum FileResponse {
     NoFile,
-    FileData(Vec<Entry>),
-    Error(Box<dyn Error>),
+    FileData(Vec<u8>),
+    // Error(Box<dyn Error>),
 }
 
 pub struct App {
     pub data_mgr: DataManager,
     pub window_state: WindowState,
 
-    pub spending_limits: Limits,
+    pub cat_mgr: CategoryManager,
     pub entry_view: Entries,
     pub add_entry_view: AddEntry,
     pub graph: Graph,
+
+    import_error: Popup,
 
     #[cfg(target_arch = "wasm32")]
     // Handle asynchronous file import on wasm
@@ -99,11 +107,12 @@ impl Default for App {
 
         Self {
             data_mgr: backend,
-            graph: Graph::default(),
-            add_entry_view: AddEntry::default(),
-            window_state: WindowState::default(),
             entry_view,
-            spending_limits: Limits::default(),
+            import_error: Popup::default(),
+            graph: Graph::default(),
+            cat_mgr: CategoryManager::default(),
+            window_state: WindowState::default(),
+            add_entry_view: AddEntry::default(),
             #[cfg(target_arch = "wasm32")]
             file_pick: Arc::new(Mutex::new(None)),
         }
@@ -130,6 +139,65 @@ impl App {
         Default::default()
     }
 
+    /// Load a file from the user on native
+    ///
+    /// For wasm handling, see MenuBar::import_button()
+    fn import_entries_file(&mut self, file_path: PathBuf) {
+        let entries = match read_entries_from_file(&file_path) {
+            Ok(entries) => entries,
+            Err(e) => {
+                let text = format!("Error reading entries from file: {e}");
+                self.show_import_error(text);
+                return;
+            }
+        };
+        if self.data_mgr.active_file != Some(file_path.clone()) {
+            self.data_mgr.active_file = Some(file_path);
+            // self.serialize_backend();
+        }
+        self.import_entry_vec(entries);
+    }
+
+    fn show_import_error(&mut self, text: String) {
+        error!("{text}");
+        self.import_error.set_contents(text);
+        self.window_state.failed_to_import_open = true;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn import_entry_byte_vec(&mut self, buffer: Vec<u8>) {
+        match read_entries_from_vec(buffer) {
+            Ok(entries) => self.import_entry_vec(entries),
+            Err(e) => {
+                self.show_import_error(format!("Error reading entries from file: {e}"));
+            }
+        };
+    }
+
+    /// Import a vector of entries. This doesn't preserve any existing entries.
+    fn import_entry_vec(&mut self, entries: Vec<Entry>) {
+        info!("Importing entry vector");
+        let unique_categories = Self::create_unique_category_set(&entries);
+        self.data_mgr.set_entries(entries);
+
+        info!("Appended categories: {unique_categories:?}");
+        match self.cat_mgr.append_categories(unique_categories) {
+            Ok(_) => (),
+
+            // should be impossible to get an error here, we're already dealing with Entrys
+            Err(e) => {
+                unreachable!("We're already processing categories. Any errors should be impossible. Error was: {e}");
+            }
+        }
+
+        // we just reloaded the entries - tell the graph to reset itself
+        self.graph.plot_reset_next_frame = true;
+    }
+
+    fn create_unique_category_set(entries: &[Entry]) -> HashSet<CategoryName> {
+        entries.iter().map(|entry| entry.category.clone()).collect()
+    }
+
     /// Display various windows based on window state
     fn show_windows(&mut self, ui: &mut Ui) {
         // Open the entry view window if the button was clicked
@@ -146,7 +214,7 @@ impl App {
             .default_size(vec2(200.0, 400.0))
             .vscroll(false)
             .show(ui.ctx(), |ui| {
-                self.spending_limits.ui(ui, &self.data_mgr);
+                self.cat_mgr.limits_ui(ui, &self.data_mgr);
             });
 
         Window::new("Graph Settings")
@@ -154,7 +222,21 @@ impl App {
             .default_size(vec2(200.0, 400.0))
             .vscroll(false)
             .show(ui.ctx(), |ui| {
-                self.graph.settings.ui(ui);
+                self.graph.settings.ui(ui, &mut self.cat_mgr);
+            });
+
+        Window::new("Category Editor")
+            .open(&mut self.window_state.category_editor_open)
+            .default_size(vec2(200.0, 400.0))
+            .vscroll(false)
+            .show(ui.ctx(), |ui| {
+                self.cat_mgr.editor_ui(ui);
+            });
+
+        Window::new("Import Error")
+            .open(&mut self.window_state.failed_to_import_open) // Bind the open state to show_popup
+            .show(ui.ctx(), |ui| {
+                self.import_error.ui(ui);
             });
 
         #[cfg(target_arch = "wasm32")]
@@ -165,5 +247,23 @@ impl App {
             .show(ui.ctx(), |ui| {
                 ui.label("Hey! Thanks for using PennyPilot on the web.\nNote: You MUST export data via file -> export in order for it to be saved!");
             });
+    }
+}
+
+/// A simple popup to the user
+#[derive(Default)]
+struct Popup {
+    contents: String,
+}
+
+impl Popup {
+    fn set_contents(&mut self, contents: String) {
+        debug!("Setting popup contents to: {contents}");
+        self.contents = contents;
+    }
+
+    fn ui(&self, ui: &mut Ui) {
+        ui.visuals_mut().override_text_color = Some(egui::Color32::RED);
+        ui.label(&self.contents);
     }
 }

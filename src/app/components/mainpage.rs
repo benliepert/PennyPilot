@@ -29,13 +29,13 @@ impl MainPage {
         }
 
         // show the 'add entry' ui. Check spending limits if something was added
-        if let Some(entry) = app.add_entry_view.ui(ui, &mut app.data_mgr) {
+        if let Some(entry) = app.add_entry_view.ui(ui, &mut app.data_mgr, &app.cat_mgr) {
             debug!("Entry added! Checking spending limits.");
-            app.spending_limits.check_limit(&entry, &app.data_mgr);
+            app.cat_mgr.check_limit(&entry, &app.data_mgr);
         }
 
         // show the graph ui
-        app.graph.ui(ui, &mut app.data_mgr);
+        app.graph.ui(ui, &mut app.data_mgr, &app.cat_mgr);
     }
 
     fn links(ui: &mut Ui) {

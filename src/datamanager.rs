@@ -1,15 +1,13 @@
+use crate::category::CategoryName;
+use crate::csvadapter::*;
+use crate::entry::Entry;
+use crate::organize::*;
 use chrono::{Datelike, NaiveDate};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use strum::IntoEnumIterator;
-
-use crate::category::Category;
-use crate::csvadapter::*;
-use crate::entry::{Cost, Entry};
-use crate::organize::*;
 
 type Comparator = Box<dyn Fn(&Entry, &Entry) -> std::cmp::Ordering>;
-type CostMap = BTreeMap<Category, BTreeMap<NaiveDate, f32>>;
+type CostMap = BTreeMap<CategoryName, BTreeMap<NaiveDate, f32>>;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -21,7 +19,8 @@ pub struct DataManager {
 
     #[serde(skip)]
     // We don't serialize entries because the underlying data could have changed, so we reload it
-    pub entries: Vec<Entry>,
+    // private to gate category updates when we update entries from a file
+    entries: Vec<Entry>,
 
     #[serde(skip)]
     /// Was data loaded recently? This is meant to share state with the rest of the app.
@@ -61,23 +60,17 @@ impl DataManager {
 }
 
 impl DataManager {
-    pub fn read_entries_from_csv(&mut self, file_path: PathBuf) {
-        let result = read_entries_from_file(&file_path);
+    pub fn has_entries(&self) -> bool {
+        !self.entries.is_empty()
+    }
 
-        match result {
-            Ok(entries) => {
-                self.entries = entries;
-                // set some flag so we know to reset the plot
-                self.plot_reset_next_frame = true;
-            }
-            Err(e) => error!("Error reading entries from file \"{:?}\": {}", file_path, e),
-        }
+    pub fn entries_len(&self) -> usize {
+        self.entries.len()
+    }
 
-        // TODO: clean this up?
-        if self.active_file != Some(file_path.clone()) {
-            self.active_file = Some(file_path);
-            // self.serialize_backend();
-        }
+    pub fn set_entries(&mut self, entries: Vec<Entry>) {
+        info!("New entries assigned to data mgr");
+        self.entries = entries;
     }
 
     /// Write entries to CSV
@@ -162,12 +155,12 @@ impl DataManager {
     /// Builds an ordered mapping for each date to the total spent on that date.
     /// order the category map so it's always sorted the same. If you use a hashmap it's in a different order for every
     /// frame, which makes them get a different color
-    pub fn cost_map(&self, group_by: GroupBy, categories: Vec<Category>) -> CostMap {
+    pub fn cost_map(&self, group_by: GroupBy, categories: Vec<CategoryName>) -> CostMap {
         if self.entries.is_empty() {
             return BTreeMap::new();
         }
         // build the cost map with zerod entries accordingly
-        let mut map = self.zero_cost_map(group_by);
+        let mut map = self.zero_cost_map(&categories, group_by);
 
         // now track a sum for each date
         for entry in self.get_entries_iter(false) {
@@ -184,7 +177,7 @@ impl DataManager {
                 }
                 GroupBy::Year => NaiveDate::from_ymd_opt(entry.date.year(), 1, 1).unwrap(),
             };
-            let inner_map = map.entry(entry.category).or_default();
+            let inner_map = map.entry(entry.category.clone()).or_default();
             let sum = inner_map.entry(scaled_date).or_insert(0.0);
             let cost: f32 = entry.cost.into();
             *sum += cost;
@@ -194,7 +187,7 @@ impl DataManager {
 
     // get the total spent in a given category given a category, month & year
     // NOTE: the 'day' component of 'date' is ignored, it's just simpler to have 1 parameter
-    pub fn monthly_cost(&self, _category: Category, _date: NaiveDate) -> f32 {
+    pub fn monthly_cost(&self, _category: &CategoryName, _date: &NaiveDate) -> f32 {
         0.0 // TODO: implement me
     }
 
@@ -227,12 +220,12 @@ impl DataManager {
     // 1/1/xxxx, 2/1/xxxx, 3/1/xxxx, etc for GroupBy::Month
     // 1/1/xxxx, 1/1/xxxx + 1, 1/1/xxxx + 2, for GroupBy::Year
     // Assumes the entry map has something in it.
-    fn zero_cost_map(&self, group_by: GroupBy) -> CostMap {
+    fn zero_cost_map(&self, categories: &[CategoryName], group_by: GroupBy) -> CostMap {
         let (first, last) = self.entries_date_extremes();
         let first_days = first.unwrap().date.num_days_from_ce();
         let last_days = last.unwrap().date.num_days_from_ce();
-
-        Category::iter()
+        categories
+            .iter()
             .map(|category| {
                 let dates = (first_days..=last_days)
                     .filter_map(|days| {
@@ -246,18 +239,31 @@ impl DataManager {
                     })
                     .map(|date| (date, 0.0))
                     .collect::<BTreeMap<NaiveDate, f32>>();
-                (category, dates)
+                (category.clone(), dates)
             })
             .collect()
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::category::Category;
+
+    const CATEGORIES: [&str; 5] = ["testa", "testb", "testc", "testd", "teste"];
+
+    #[cfg(test)]
+    fn random_category() -> CategoryName {
+        use rand::Rng;
+        use std::str::FromStr;
+        let mut rng = rand::thread_rng();
+        let index = rng.gen_range(0..CATEGORIES.len());
+        let name = CATEGORIES[index];
+        CategoryName::from_str(name).unwrap()
+    }
 
     /// Modify the backend in place. give it a random list of (sorted) entries of a particular size
-    fn _fill_entries(size: usize, backend: &mut DataManager) {
+    #[cfg(test)]
+    fn fill_entries(size: usize, backend: &mut DataManager) {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         let mut entries = Vec::with_capacity(size);
@@ -275,9 +281,9 @@ mod tests {
 
             entries.push(Entry {
                 name: format!("entry{}", i),
-                cost: Cost::try_from(rng.gen_range(1.0..=500.0)).unwrap(),
+                cost: crate::entry::Cost::try_from(rng.gen_range(1.0..=500.0)).unwrap(),
                 date,
-                category: Category::_get_random(),
+                category: random_category(),
             });
         }
 
@@ -287,17 +293,22 @@ mod tests {
 
     /// TODO: make this work for other groupings
     #[test]
-    fn test_cost_map() {
+    fn cost_map() {
         use chrono::Duration;
+        use std::str::FromStr;
         let mut backend = DataManager::default();
-        tests::_fill_entries(1_000_000, &mut backend);
+        tests::fill_entries(1_000_000, &mut backend);
 
         let (first, last) = backend.entries_date_extremes();
         let first_days = first.unwrap().date.num_days_from_ce();
         let last_days = last.unwrap().date.num_days_from_ce();
 
-        let categories = Category::_get_all();
-        let map = backend.cost_map(GroupBy::Day, categories.clone());
+        let cat_names = CATEGORIES;
+        let mut categories = Vec::new();
+        for cat in cat_names.iter() {
+            categories.push(CategoryName::from_str(cat).unwrap());
+        }
+        let map = backend.cost_map(GroupBy::Day, categories.clone().to_vec());
 
         // map should have a key for every category
         assert!(categories.iter().all(|category| map.contains_key(category)));

@@ -15,7 +15,7 @@
         },
         "problemMatcher": [],
         "group": {
-          "kind": "test",
+          "kind": "build",
           "isDefault": true
         }
       },

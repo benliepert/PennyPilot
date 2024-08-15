@@ -1,9 +1,9 @@
-use crate::category::Category;
-
 use chrono::NaiveDate;
 use csv::StringRecord;
 use std::error::Error;
 use std::str::FromStr;
+
+use crate::category::CategoryName;
 
 #[derive(Copy, serde::Deserialize, serde::Serialize, PartialEq, Clone, Debug)]
 pub struct Cost(f32);
@@ -33,7 +33,7 @@ pub struct Entry {
     pub name: String,
     pub cost: Cost,
     pub date: NaiveDate,
-    pub category: Category,
+    pub category: CategoryName,
 }
 
 impl PartialEq for Entry {
@@ -58,7 +58,8 @@ impl Default for Entry {
             name: "".to_string(),
             cost: Cost::try_from(0.0).unwrap(),
             date: NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
-            category: Category::Misc,
+            category: CategoryName::from_str("default")
+                .expect("'default' is a valid category name"),
         }
     }
 }
@@ -74,7 +75,7 @@ impl TryFrom<StringRecord> for Entry {
         let name = record[0].to_string();
         let date = NaiveDate::parse_from_str(&record[1], "%Y-%m-%d")?;
         let cost = record[2].parse::<f32>()?;
-        let category = Category::from_str(&record[3])?;
+        let category = CategoryName::from_str(&record[3])?;
 
         Ok(Entry {
             name,
